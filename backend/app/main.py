@@ -1,6 +1,8 @@
 from fastapi import FastAPI, UploadFile, File
 import os
 
+from app.agents.code_understanding_agent import analyze_fortran_code
+
 app = FastAPI()
 
 UPLOAD_DIR = "uploads"
@@ -21,8 +23,12 @@ async def upload_file(file: UploadFile = File(...)):
     with open(file_path, "wb") as f:
         f.write(content)
 
+    # READ FILE CONTENT FOR AI
+    fortran_text = content.decode("utf-8", errors="ignore")
+
+    analysis = analyze_fortran_code(fortran_text)
+
     return {
         "filename": file.filename,
-        "size_bytes": len(content),
-        "message": "File uploaded successfully"
+        "analysis": analysis
     }
