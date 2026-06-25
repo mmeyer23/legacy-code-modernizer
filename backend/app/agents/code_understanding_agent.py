@@ -1,19 +1,32 @@
+import json
 from app.services.llm_service import analyze_code
 
 
 def build_analysis_prompt(fortran_code: str) -> str:
     return f"""
-Analyze the following Fortran code for migration to Python.
+You are an expert software engineer specializing in legacy system modernization.
 
-Return structured output with:
+Analyze the following Fortran code and return ONLY valid JSON.
 
-1. Summary of what the program does
-2. Inputs
-3. Outputs
-4. Key variables
-5. Key functions/subroutines
-6. Data flow
-7. Potential migration challenges
+DO NOT include markdown, explanations, or text outside JSON.
+
+Return exactly this structure:
+
+{{
+  "summary": "string",
+  "inputs": ["string"],
+  "outputs": ["string"],
+  "variables": ["string"],
+  "functions": ["string"],
+  "data_flow": ["string"],
+  "migration_challenges": ["string"]
+}}
+
+Rules:
+- Be precise and concise
+- Use bullet-like short strings in arrays
+- If something is unknown, infer conservatively
+- Ensure valid JSON only
 
 Fortran Code:
 ----------------
@@ -22,6 +35,14 @@ Fortran Code:
 """
 
 
-def analyze_fortran_code(fortran_code: str) -> str:
+def analyze_fortran_code(fortran_code: str):
     prompt = build_analysis_prompt(fortran_code)
-    return analyze_code(prompt)
+    result = analyze_code(prompt)
+
+    try:
+        return json.loads(result)
+    except Exception:
+        return {
+            "error": "Failed to parse model output",
+            "raw_output": result
+        }
