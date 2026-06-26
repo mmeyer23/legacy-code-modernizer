@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 import os
 
 from app.agents.code_understanding_agent import analyze_fortran_code
+from app.agents.migration_agent import generate_python_code
 
 app = FastAPI()
 
@@ -23,12 +24,13 @@ async def upload_file(file: UploadFile = File(...)):
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # READ FILE CONTENT FOR AI
     fortran_text = content.decode("utf-8", errors="ignore")
 
     analysis = analyze_fortran_code(fortran_text)
+    python_code = generate_python_code(analysis)
 
     return {
         "filename": file.filename,
-        "analysis": analysis
+        "analysis": analysis,
+        "python_code": python_code
     }
