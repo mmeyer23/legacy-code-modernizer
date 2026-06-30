@@ -18,7 +18,7 @@ RULES:
 - If logic is missing, implement a placeholder function with a comment
 
 STRUCTURED ANALYSIS:
-{context.analysis}
+{context.analysis.model_dump_json(indent=2)}
 
 OUTPUT REQUIREMENTS:
 - Output ONLY Python code
