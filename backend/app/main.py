@@ -1,8 +1,8 @@
 from fastapi import FastAPI, UploadFile, File
 import os
 
-from app.agents.code_understanding_agent import analyze_fortran_code
-from app.agents.migration_agent import generate_python_code
+from app.pipeline.analyzer import analyze_fortran_code
+from app.pipeline.translator import generate_python_code
 
 app = FastAPI()
 
