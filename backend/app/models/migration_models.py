@@ -9,3 +9,4 @@ class MigrationContext(BaseModel):
     analysis: AnalysisIR | None = None
     analysis_error: str | None = None
     raw_analysis_output: str | None = None
+    python_code: str | None = None

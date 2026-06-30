@@ -4,6 +4,7 @@ import os
 from app.models.migration_models import MigrationContext
 from app.pipeline.analyzer import analyze_fortran_code
 from app.pipeline.translator import generate_python_code
+from app.pipeline.validator import validate_translation
 
 app = FastAPI()
 
@@ -32,10 +33,12 @@ async def upload_file(file: UploadFile = File(...)):
         original_source=fortran_text,
     )
     context = analyze_fortran_code(context)
-    python_code = generate_python_code(context)
+    context.python_code = generate_python_code(context)
+    validation_report = validate_translation(context, context.python_code)
 
     return {
         "filename": context.filename,
         "analysis": context.analysis,
-        "python_code": python_code
+        "python_code": context.python_code,
+        "validation": validation_report
     }
