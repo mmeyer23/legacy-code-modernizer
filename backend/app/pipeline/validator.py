@@ -7,9 +7,11 @@ from app.services.llm_service import analyze_code
 
 def build_validation_prompt(context: MigrationContext, generated_code: str) -> str:
     return f"""
-You are a strict code verification engine.
+You are a strict static analysis and code validation engine.
 
-You MUST compare the IR against the generated Python code line-by-line conceptually.
+You evaluate correctness of generated code against an Intermediate Representation (IR) line-by-line.
+
+You are NOT a reviewer.  You are a compiler-style validator.
 
 ## IR (ground truth specification)
 {context.analysis.model_dump_json(indent=2) if context.analysis else "{}"}
@@ -19,44 +21,134 @@ You MUST compare the IR against the generated Python code line-by-line conceptua
 
 ---
 
-## REQUIRED CHECKS
+# TASKS (MUST FOLLOW EXACTLY)
 
-### 1. Function Coverage
-Ensure every IR function exists in Python.
+## 1. FUNCTION COVERAGE CHECK
+Compare IR functions vs Python functions.
 
-### 2. Variable Mapping
-Ensure all IR variables are represented in Python code (directly or mapped).
+Compute:
+- functions_total = number of functions in IR
+- functions_matched = number of IR functions implemented in Python
 
-### 3. Behavior Preservation
-Detect placeholder logic such as:
-- "pass"
-- "return Unknown"
+A function is ONLY matched if it is:
+- explicitly implemented
+- not a placeholder (no "pass", no "return 'Unknown'")
+
+---
+
+## 2. VARIABLE COVERAGE CHECK
+Compare IR variables vs Python variables.
+
+Compute:
+- variables_total
+- variables_matched
+
+A variable is matched if:
+- it is explicitly represented in Python code
+- not replaced with dummy placeholders unless justified by IR
+
+---
+
+## 3. PLACEHOLDER DETECTION (CRITICAL)
+Identify any placeholder or non-implemented logic.
+
+Examples:
+- pass
+- return "Unknown"
+- return None (when logic expected)
 - dummy arrays like [0] * n
+- empty function bodies
 
-### 4. Hallucinations
-Flag any logic not present in IR.
+Each placeholder must be penalized.
+
+---
+
+## 4. HALLUCINATION DETECTION
+Flag any:
+- functions not in IR
+- logic not supported by IR
+- extra behavior introduced by model
+
+---
+
+# SCORING RULES (HARD ENFORCED)
+
+Start with:
+
+100 points
+
+Apply penalties:
+
+- placeholder_logic (function) → -20 each
+- placeholder_logic (variable misuse) → -10 each
+- missing_function → -25 each
+- mapping_error → -10 each
+- hallucination → -30 each
+
+Final score MUST reflect ALL penalties.
+
+Clamp score between 0 and 100.
+
+---
+
+# CATEGORY RULES (STRICT ENUM ONLY)
+
+All issue categories MUST be EXACTLY one of:
+
+- missing_function
+- mapping_error
+- placeholder_logic
+- hallucination
+
+Category usage rules:
+
+- Use "missing_function" ONLY when an IR function does not exist anywhere in the generated code.
+
+- If a function exists but contains only placeholder logic (such as "pass", "return Unknown", "return None", or an empty body), classify it as "placeholder_logic".
+
+Do not classify placeholder implementations as missing functions.
 
 ---
 
 ## OUTPUT FORMAT (STRICT JSON)
 
-Return a JSON object with the following structure:
+{{
+  "passed": true/false,
 
-Use this exact schema:
+  "confidence_score": 0-100,
 
-passed: boolean
-confidence_score: number
-strengths: list of strings
+  "coverage": {{
+    "functions_total": int,
+    "functions_matched": int,
+    "variables_total": int,
+    "variables_matched": int
+  }},
 
-issues: list of objects with:
-- severity (low, medium, high)
-- category (missing_function, mapping_error, placeholder_logic, hallucination)
-- message (string)
+  "strengths": [],
+  "issues": [
+    {{
+      "severity": "low|medium|high|critical",
+      "category": "missing_function | mapping_error | placeholder_logic | hallucination",
+      "message": "..."
+    }}
+  ],
 
-recommendations: list of strings
+  "recommendations": []
+}}
 
-Be strict. If placeholders exist, DO NOT give a high confidence score.
-Return ONLY JSON.
+---
+
+# PASS/FAIL RULE
+
+A result is ONLY "passed": true if:
+- confidence_score >= 80
+- AND no high or critical severity issues exist
+
+Otherwise, passed MUST be false.
+
+---
+
+Return ONLY JSON. No explanation. No markdown.
 """
 
 
