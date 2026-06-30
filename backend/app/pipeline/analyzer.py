@@ -1,5 +1,4 @@
-import json
-
+from app.models.analysis_models import AnalysisIR
 from app.models.migration_models import MigrationContext
 from app.services.llm_service import analyze_code
 
@@ -16,19 +15,55 @@ Return exactly this structure:
 
 {{
   "summary": "string",
-  "inputs": ["string"],
-  "outputs": ["string"],
-  "variables": ["string"],
-  "functions": ["string"],
-  "data_flow": ["string"],
-  "migration_challenges": ["string"]
+
+  "inputs": [
+    "string"
+  ],
+
+  "outputs": [
+    "string"
+  ],
+
+  "variables": [
+    {{
+      "name": "string",
+      "type": "string",
+      "purpose": "string"
+    }}
+  ],
+
+  "functions": [
+    {{
+      "name": "string",
+      "purpose": "string",
+      "parameters": [
+        "string"
+      ],
+      "returns": "string",
+      "calls": [
+        "string"
+      ]
+    }}
+  ],
+
+  "data_flow": [
+    "string"
+  ],
+
+  "migration_challenges": [
+    "string"
+  ]
 }}
 
 Rules:
-- Be precise and concise
-- Use bullet-like short strings in arrays
-- If something is unknown, infer conservatively
-- Ensure valid JSON only
+- Return ONLY valid JSON.
+- Every field in the schema is required.
+- Never omit a field.
+- Use [] for empty arrays.
+- Use "Unknown" when a string value cannot be determined.
+- Do not invent functionality that is not present.
+- Infer conservatively.
+- The output will be parsed by another software component.
 
 Fortran Code:
 ----------------
@@ -42,11 +77,20 @@ def analyze_fortran_code(context: MigrationContext) -> MigrationContext:
     result = analyze_code(prompt)
 
     try:
-        analysis = json.loads(result)
-    except Exception:
-        analysis = {
-            "error": "Failed to parse model output",
-            "raw_output": result
-        }
+        analysis = AnalysisIR.model_validate_json(result)
+    except Exception as exc:
+        return context.model_copy(
+            update={
+                "analysis": None,
+                "analysis_error": f"Failed to parse model output: {exc}",
+                "raw_analysis_output": result,
+            }
+        )
 
-    return context.model_copy(update={"analysis": analysis})
+    return context.model_copy(
+        update={
+            "analysis": analysis,
+            "analysis_error": None,
+            "raw_analysis_output": None,
+        }
+    )
