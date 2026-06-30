@@ -1,9 +1,11 @@
-from typing import Any
+from pydantic import BaseModel
 
-from pydantic import BaseModel, Field
+from app.models.analysis_models import AnalysisIR
 
 
 class MigrationContext(BaseModel):
     filename: str
     original_source: str
-    analysis: dict[str, Any] = Field(default_factory=dict)
+    analysis: AnalysisIR | None = None
+    analysis_error: str | None = None
+    raw_analysis_output: str | None = None
