@@ -31,3 +31,7 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Local AI / developer notes
+.local/
+

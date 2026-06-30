@@ -3,27 +3,27 @@ from app.services.llm_service import analyze_code
 
 def build_migration_prompt(analysis: dict) -> str:
     return f"""
-You are a senior software engineer specializing in legacy system modernization.
+You are a deterministic code translation engine.
 
-You are given a structured analysis of a Fortran program.
+You are NOT allowed to invent new logic.
 
-Your job is to generate equivalent Python code that preserves behavior.
+You must ONLY translate what is explicitly present in the structured analysis.
 
-Rules:
+RULES:
+- Do NOT guess or infer missing logic
+- Do NOT create new weather codes or mappings
+- Do NOT add features not described in inputs/outputs/functions
+- Preserve behavior as closely as possible
+- If logic is missing, implement a placeholder function with a comment
+
+STRUCTURED ANALYSIS:
+{analysis}
+
+OUTPUT REQUIREMENTS:
 - Output ONLY Python code
 - No explanations
 - No markdown
-- Use clean, readable Python
-- Prefer functions and classes where appropriate
-- Preserve logic exactly
-- Use comments to explain mappings from Fortran where helpful
-
-Structured Analysis:
---------------------
-{analysis}
---------------------
-
-Return the full Python implementation.
+- Must be runnable Python
 """
 
 
