@@ -1,7 +1,8 @@
+from app.models.migration_models import MigrationContext
 from app.services.llm_service import analyze_code
 
 
-def build_migration_prompt(analysis: dict) -> str:
+def build_migration_prompt(context: MigrationContext) -> str:
     return f"""
 You are a deterministic code translation engine.
 
@@ -17,7 +18,7 @@ RULES:
 - If logic is missing, implement a placeholder function with a comment
 
 STRUCTURED ANALYSIS:
-{analysis}
+{context.analysis}
 
 OUTPUT REQUIREMENTS:
 - Output ONLY Python code
@@ -27,6 +28,6 @@ OUTPUT REQUIREMENTS:
 """
 
 
-def generate_python_code(analysis: dict) -> str:
-    prompt = build_migration_prompt(analysis)
+def generate_python_code(context: MigrationContext) -> str:
+    prompt = build_migration_prompt(context)
     return analyze_code(prompt)

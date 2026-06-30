@@ -1,4 +1,6 @@
 import json
+
+from app.models.migration_models import MigrationContext
 from app.services.llm_service import analyze_code
 
 
@@ -35,14 +37,16 @@ Fortran Code:
 """
 
 
-def analyze_fortran_code(fortran_code: str):
-    prompt = build_analysis_prompt(fortran_code)
+def analyze_fortran_code(context: MigrationContext) -> MigrationContext:
+    prompt = build_analysis_prompt(context.original_source)
     result = analyze_code(prompt)
 
     try:
-        return json.loads(result)
+        analysis = json.loads(result)
     except Exception:
-        return {
+        analysis = {
             "error": "Failed to parse model output",
             "raw_output": result
         }
+
+    return context.model_copy(update={"analysis": analysis})

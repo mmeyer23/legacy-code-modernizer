@@ -33,5 +33,5 @@ dist/
 .idea/
 
 # Local AI / developer notes
-.local/
+.AGENTS.md
 

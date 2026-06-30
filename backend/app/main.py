@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 import os
 
+from app.models.migration_models import MigrationContext
 from app.pipeline.analyzer import analyze_fortran_code
 from app.pipeline.translator import generate_python_code
 
@@ -26,11 +27,15 @@ async def upload_file(file: UploadFile = File(...)):
 
     fortran_text = content.decode("utf-8", errors="ignore")
 
-    analysis = analyze_fortran_code(fortran_text)
-    python_code = generate_python_code(analysis)
+    context = MigrationContext(
+        filename=file.filename,
+        original_source=fortran_text,
+    )
+    context = analyze_fortran_code(context)
+    python_code = generate_python_code(context)
 
     return {
-        "filename": file.filename,
-        "analysis": analysis,
+        "filename": context.filename,
+        "analysis": context.analysis,
         "python_code": python_code
     }
