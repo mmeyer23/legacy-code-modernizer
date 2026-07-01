@@ -1,10 +1,16 @@
 from pydantic import BaseModel
 
 
-class ValidationIssue(BaseModel):
+class SemanticIssue(BaseModel):
     severity: str  # low | medium | high | critical
-    category: str  # missing_function | mapping_error | placeholder_logic | hallucination
+    category: str  # placeholder_logic | hallucination | mapping_error
     message: str
+
+
+class SemanticValidation(BaseModel):
+    strengths: list[str]
+    issues: list[SemanticIssue]
+    recommendations: list[str]
 
 
 class CoverageReport(BaseModel):
@@ -16,10 +22,10 @@ class CoverageReport(BaseModel):
 
 class ValidationReport(BaseModel):
     passed: bool
-    confidence_score: int  # 0–100
+    confidence_score: int
 
     coverage: CoverageReport
 
     strengths: list[str]
-    issues: list[ValidationIssue]
+    issues: list[SemanticIssue]
     recommendations: list[str]

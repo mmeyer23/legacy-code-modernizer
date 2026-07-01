@@ -1,180 +1,218 @@
 import json
 
 from app.models.migration_models import MigrationContext
-from app.models.validation_models import ValidationReport
+from app.models.static_analysis_models import StaticAnalysisReport
+from app.models.validation_models import (
+    SemanticValidation,
+    ValidationReport,
+    CoverageReport,
+)
 from app.services.llm_service import analyze_code
 
 
-def build_validation_prompt(context: MigrationContext, generated_code: str) -> str:
+def build_validation_prompt(
+    context: MigrationContext,
+    generated_code: str,
+    static_report: StaticAnalysisReport,
+) -> str:
     return f"""
-You are a strict static analysis and code validation engine.
+You are a software migration validation engine.
 
-You evaluate correctness of generated code against an Intermediate Representation (IR) line-by-line.
+Your job is to evaluate the semantic correctness of generated Python code against the provided Intermediate Representation (IR).
 
-You are NOT a reviewer.  You are a compiler-style validator.
+The deterministic structure of the code (function existence, variable existence, syntax, and coverage) has ALREADY been validated by the application.
 
-## IR (ground truth specification)
+DO NOT evaluate structural coverage.
+
+Your ONLY responsibilities are:
+
+1. Detect placeholder implementations.
+2. Detect hallucinated behavior.
+3. Detect incorrect mappings from the IR.
+4. Determine whether the generated code preserves the intent of the original program.
+
+--------------------------------------------------
+INTERMEDIATE REPRESENTATION (Ground Truth)
+--------------------------------------------------
+
 {context.analysis.model_dump_json(indent=2) if context.analysis else "{}"}
 
-## Generated Python code
+--------------------------------------------------
+Generated Python Code
+--------------------------------------------------
+
 {generated_code}
 
----
+--------------------------------------------------
+STATIC ANALYSIS (Deterministic)
+--------------------------------------------------
 
-# TASKS (MUST FOLLOW EXACTLY)
+{json.dumps(static_report.model_dump(), indent=2)}
 
-## 1. FUNCTION COVERAGE CHECK
-Compare IR functions vs Python functions.
+--------------------------------------------------
+VALIDATION RULES
+--------------------------------------------------
 
-Compute:
-- functions_total = number of functions in IR
-- functions_matched = number of IR functions implemented in Python
-
-A function is ONLY matched if it is:
-- explicitly implemented
-- not a placeholder (no "pass", no "return 'Unknown'")
-
----
-
-## 2. VARIABLE COVERAGE CHECK
-Compare IR variables vs Python variables.
-
-Compute:
-- variables_total
-- variables_matched
-
-A variable is matched if:
-- it is explicitly represented in Python code
-- not replaced with dummy placeholders unless justified by IR
-
----
-
-## 3. PLACEHOLDER DETECTION (CRITICAL)
-Identify any placeholder or non-implemented logic.
-
-Examples:
+Placeholder Logic:
+Flag implementations that are clearly unfinished, including:
 - pass
+- ...
 - return "Unknown"
-- return None (when logic expected)
-- dummy arrays like [0] * n
-- empty function bodies
+- return None
+- TODO comments
+- placeholder comments indicating missing implementation
 
-Each placeholder must be penalized.
+Hallucinations:
+Flag code that invents:
+- functions
+- classes
+- business logic
+- mappings
+- behavior
+that cannot be inferred from the IR.
 
----
+Incorrect Mapping:
+Flag implementations that contradict the IR.
 
-## 4. HALLUCINATION DETECTION
-Flag any:
-- functions not in IR
-- logic not supported by IR
-- extra behavior introduced by model
+Behavior Preservation:
+Determine whether the generated code preserves the intent of the original program.
 
----
+When multiple functions violate the same rule,
+create one issue per function.
 
-# SCORING RULES (HARD ENFORCED)
+Do NOT combine multiple violations into a single issue.
 
-Start with:
+--------------------------------------------------
+Issue Categories (STRICT ENUM)
+--------------------------------------------------
 
-100 points
+Use ONLY:
 
-Apply penalties:
-
-- placeholder_logic (function) → -20 each
-- placeholder_logic (variable misuse) → -10 each
-- missing_function → -25 each
-- mapping_error → -10 each
-- hallucination → -30 each
-
-Final score MUST reflect ALL penalties.
-
-Clamp score between 0 and 100.
-
----
-
-# CATEGORY RULES (STRICT ENUM ONLY)
-
-All issue categories MUST be EXACTLY one of:
-
-- missing_function
-- mapping_error
 - placeholder_logic
 - hallucination
+- mapping_error
 
-Category usage rules:
+--------------------------------------------------
+OUTPUT FORMAT
+--------------------------------------------------
 
-- Use "missing_function" ONLY when an IR function does not exist anywhere in the generated code.
-
-- If a function exists but contains only placeholder logic (such as "pass", "return Unknown", "return None", or an empty body), classify it as "placeholder_logic".
-
-Do not classify placeholder implementations as missing functions.
-
----
-
-## OUTPUT FORMAT (STRICT JSON)
+Return ONLY valid JSON.
 
 {{
-  "passed": true/false,
-
-  "confidence_score": 0-100,
-
-  "coverage": {{
-    "functions_total": int,
-    "functions_matched": int,
-    "variables_total": int,
-    "variables_matched": int
-  }},
-
-  "strengths": [],
+  "strengths": [
+    "string"
+  ],
   "issues": [
     {{
-      "severity": "low|medium|high|critical",
-      "category": "missing_function | mapping_error | placeholder_logic | hallucination",
-      "message": "..."
+      "severity": "low | medium | high | critical",
+      "category": "placeholder_logic | hallucination | mapping_error",
+      "message": "string"
     }}
   ],
-
-  "recommendations": []
+  "recommendations": [
+    "string"
+  ]
 }}
 
----
-
-# PASS/FAIL RULE
-
-A result is ONLY "passed": true if:
-- confidence_score >= 80
-- AND no high or critical severity issues exist
-
-Otherwise, passed MUST be false.
-
----
-
-Return ONLY JSON. No explanation. No markdown.
+Return JSON only.
 """
+    
 
+def validate_translation(
+    context: MigrationContext,
+    generated_code: str,
+    static_report: StaticAnalysisReport,
+) -> ValidationReport:
 
-def validate_translation(context: MigrationContext, generated_code: str) -> ValidationReport:
-    prompt = build_validation_prompt(context, generated_code)
+    if context.analysis is None:
+        return ValidationReport(
+            passed=False,
+            confidence_score=0,
+            coverage=CoverageReport(
+                functions_total=0,
+                functions_matched=0,
+                variables_total=0,
+                variables_matched=0,
+            ),
+            strengths=[],
+            issues=[],
+            recommendations=[
+                "Fix analysis parsing before validating translation."
+            ],
+        )
+
+    prompt = build_validation_prompt(
+        context,
+        generated_code,
+        static_report,
+    )
 
     result = analyze_code(prompt)
 
     try:
         data = json.loads(result)
-        return ValidationReport.model_validate(data)
+
+        semantic_validation = SemanticValidation.model_validate(data)
+
+        score = 100
+
+        for issue in semantic_validation.issues:
+            if issue.severity == "critical":
+                score -= 30
+            elif issue.severity == "high":
+                score -= 20
+            elif issue.severity == "medium":
+                score -= 10
+            elif issue.severity == "low":
+                score -= 5
+
+        if static_report.functions_matched != static_report.functions_total:
+            score -= 20
+
+        if static_report.variables_matched != static_report.variables_total:
+            score -= 10
+
+        score = max(0, min(score, 100))
+
+        has_serious_issue = any(
+            issue.severity in {"high", "critical"}
+            for issue in semantic_validation.issues
+        )
+
+        passed = (
+            score >= 80
+            and not has_serious_issue
+            and static_report.functions_matched == static_report.functions_total
+            and static_report.variables_matched == static_report.variables_total
+        )
+
+        return ValidationReport(
+            passed=passed,
+            confidence_score=score,
+            coverage=CoverageReport(
+                functions_total=static_report.functions_total,
+                functions_matched=static_report.functions_matched,
+                variables_total=static_report.variables_total,
+                variables_matched=static_report.variables_matched,
+            ),
+            strengths=semantic_validation.strengths,
+            issues=semantic_validation.issues,
+            recommendations=semantic_validation.recommendations,
+        )
 
     except Exception as e:
         return ValidationReport(
             passed=False,
             confidence_score=0,
+            coverage=CoverageReport(
+                functions_total=static_report.functions_total,
+                functions_matched=static_report.functions_matched,
+                variables_total=static_report.variables_total,
+                variables_matched=static_report.variables_matched,
+            ),
             strengths=[],
-            issues=[
-                {
-                    "severity": "error",
-                    "category": "validation_failure",
-                    "message": f"Failed to parse validation output: {str(e)}"
-                }
-            ],
+            issues=[],
             recommendations=[
-                "Fix LLM output format",
-                "Ensure model returns strict JSON"
-            ]
+                f"Failed to parse validation output: {str(e)}"
+            ],
         )
