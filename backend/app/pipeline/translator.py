@@ -3,6 +3,9 @@ from app.services.llm_service import analyze_code
 
 
 def build_migration_prompt(context: MigrationContext) -> str:
+    if context.analysis is None:
+        raise ValueError("Cannot build migration prompt without successful analysis.")
+
     return f"""
 You are a deterministic code translation engine.
 
@@ -29,5 +32,8 @@ OUTPUT REQUIREMENTS:
 
 
 def generate_python_code(context: MigrationContext) -> str:
+    if context.analysis is None:
+        raise ValueError("Cannot generate Python code without successful analysis.")
+
     prompt = build_migration_prompt(context)
     return analyze_code(prompt)

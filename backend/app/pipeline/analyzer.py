@@ -80,16 +80,21 @@ def analyze_fortran_code(context: MigrationContext) -> MigrationContext:
     try:
         analysis = AnalysisIR.model_validate_json(result)
     except ValidationError as e:
-        analysis = {
-        "error": "Failed to validate analysis",
-        "details": e.errors(),
-        "raw_output": result
-        }
-    except Exception:
-        analysis = {
-        "error": "Failed to parse model output",
-        "raw_output": result
-    }
+        return context.model_copy(
+            update={
+                "analysis": None,
+                "analysis_error": f"Failed to validate analysis: {e.errors()}",
+                "raw_analysis_output": result,
+            }
+        )
+    except Exception as exc:
+        return context.model_copy(
+            update={
+                "analysis": None,
+                "analysis_error": f"Failed to parse model output: {exc}",
+                "raw_analysis_output": result,
+            }
+        )
 
     return context.model_copy(
         update={
